@@ -1,0 +1,100 @@
+services:
+  # OSRM Routing Engine - Car (driving)
+  osrm-car:
+    image: osrm/osrm-backend
+    container_name: istanbul-osrm-car
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./osrm-data-car:/data
+    environment:
+      - THREADS=8
+    command: >
+      osrm-routed
+      --algorithm ch
+      --max-table-size 10000
+      /data/istanbul
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - routing-network
+
+  # OSRM Routing Engine - Walking
+  osrm-walk:
+    image: osrm/osrm-backend
+    container_name: istanbul-osrm-walk
+    ports:
+      - "5001:5000"
+    volumes:
+      - ./osrm-data-walk:/data
+    environment:
+      - THREADS=8
+    command: >
+      osrm-routed
+      --algorithm ch
+      --max-table-size 10000
+      /data/istanbul
+    restart: unless-stopped
+    networks:
+      - routing-network
+
+  # OSRM Routing Engine - Bicycle
+  osrm-bike:
+    image: osrm/osrm-backend
+    container_name: istanbul-osrm-bike
+    ports:
+      - "5002:5000"
+    volumes:
+      - ./osrm-data-bike:/data
+    environment:
+      - THREADS=8
+    command: >
+      osrm-routed
+      --algorithm ch
+      --max-table-size 10000
+      /data/istanbul
+    restart: unless-stopped
+    networks:
+      - routing-network
+
+  # Backend API Server
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: istanbul-routing-api
+    ports:
+      - "8000:8000"
+    environment:
+      - OSRM_URL_DRIVING=http://osrm-car:5000
+      - OSRM_URL_FOOT=http://osrm-walk:5000
+      - OSRM_URL_BIKE=http://osrm-bike:5000
+    depends_on:
+      - osrm-car
+      - osrm-walk
+      - osrm-bike
+    restart: unless-stopped
+    networks:
+      - routing-network
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: istanbul-routing-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - routing-network
+
+networks:
+  routing-network:
+    driver: bridge
